@@ -1,6 +1,6 @@
 /**
  * VYAAPAAR E-COMMERCE CLIENT SCRIPT (Vanilla JavaScript)
- * Handles API integration, dynamic rendering, user session, and cart synchronization.
+ * Handles API integration, dynamic rendering, user session, responsive navigation, and cart synchronization.
  */
 
 const API_BASE = '/api';
@@ -110,6 +110,49 @@ function setupGlobalSearch() {
     }
 }
 
+function setupMobileNav() {
+    const navContainer = document.querySelector('.nav-container');
+    const navLinks = document.querySelector('.nav-links');
+    if (!navContainer || !navLinks) return;
+
+    let toggle = document.getElementById('nav-toggle') || document.querySelector('.nav-toggle');
+    if (!toggle) {
+        toggle = document.createElement('button');
+        toggle.id = 'nav-toggle';
+        toggle.className = 'nav-toggle';
+        toggle.setAttribute('aria-label', 'Toggle Navigation');
+        toggle.type = 'button';
+        toggle.innerHTML = `
+            <span class="hamburger-bar"></span>
+            <span class="hamburger-bar"></span>
+            <span class="hamburger-bar"></span>
+        `;
+        navContainer.insertBefore(toggle, navLinks);
+    }
+
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggle.classList.toggle('active');
+        navLinks.classList.toggle('open');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (navLinks.classList.contains('open') && !navLinks.contains(e.target) && !toggle.contains(e.target)) {
+            toggle.classList.remove('active');
+            navLinks.classList.remove('open');
+        }
+    });
+
+    // Close menu on link click
+    navLinks.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+            toggle.classList.remove('active');
+            navLinks.classList.remove('open');
+        });
+    });
+}
+
 // ==========================================================================
 // TOAST NOTIFICATIONS
 // ==========================================================================
@@ -164,6 +207,7 @@ function getProductIcon(categoryId) {
 
 // Global initialization on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
+    setupMobileNav();
     updateNavState();
     updateCartBadge();
     setupGlobalSearch();
