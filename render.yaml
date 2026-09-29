@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: vyaapaar-ecommerce
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 8080

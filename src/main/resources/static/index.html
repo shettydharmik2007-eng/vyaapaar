@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vyaapaar — E-Commerce Order & Inventory Management System</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <!-- Top Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/index.html" class="brand-logo">
+                <span class="brand-badge">व्यापार</span>
+                <span>VYAAPAAR</span>
+            </a>
+
+            <form id="nav-search-form" class="nav-search">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="nav-search-input" placeholder="Search headphones, t-shirts, books, appliances...">
+            </form>
+
+            <ul class="nav-links">
+                <li><a href="/index.html" class="nav-link active">Home</a></li>
+                <li><a href="/products.html" class="nav-link">Products</a></li>
+                <li>
+                    <a href="/cart.html" class="cart-btn">
+                        <span>🛒 Cart</span>
+                        <span id="cart-badge" class="cart-badge">0</span>
+                    </a>
+                </li>
+                <li id="nav-auth-links">
+                    <a href="/login.html" class="nav-link">Login</a>
+                    <a href="/register.html" class="btn btn-primary btn-sm">Register</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="container">
+        <!-- Hero Section -->
+        <section class="hero-banner">
+            <div class="hero-content">
+                <span class="hero-tag">⚡ Enterprise E-Commerce Platform</span>
+                <h1 class="hero-title">Welcome to Vyaapaar E-Commerce</h1>
+                <p class="hero-desc">
+                    Explore high-quality products across electronics, fashion, home essentials, and academic books. Enjoy real-time inventory tracking and guaranteed transactional checkout.
+                </p>
+                <div class="hero-actions">
+                    <a href="/products.html" class="btn btn-primary">Browse All Products →</a>
+                    <a href="/register.html" class="btn btn-outline" style="color: white; border-color: rgba(255,255,255,0.4);">Create Free Account</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Categories Bar -->
+        <section style="margin-bottom: 2.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+                <h2 style="font-size: 1.5rem; font-weight: 800;">Featured Categories</h2>
+                <a href="/products.html" style="color: var(--primary); font-weight: 600; text-decoration: none;">View Catalog →</a>
+            </div>
+            <div id="category-bar" class="category-filter-bar">
+                <button class="category-chip active" onclick="filterCategory(0)">All Categories</button>
+                <!-- Dynamic categories loaded via JS -->
+            </div>
+        </section>
+
+        <!-- Featured Products Grid -->
+        <section>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+                <div>
+                    <h2 style="font-size: 1.5rem; font-weight: 800;">Explore Catalog</h2>
+                    <p style="color: var(--text-secondary); font-size: 0.95rem;">Real-time stock verified from database</p>
+                </div>
+            </div>
+
+            <div id="products-loading" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                <p>Loading real products from database...</p>
+            </div>
+
+            <div id="products-container" class="product-grid" style="display: none;">
+                <!-- Dynamically populated product cards -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p><strong>Vyaapaar E-Commerce System</strong> — Powered by Java SE 17, JDBC & Relational MySQL Database</p>
+        <p style="margin-top: 0.35rem;">Academic Project for B.E. in Artificial Intelligence & Data Science</p>
+    </footer>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        let allProducts = [];
+        let activeCategoryId = 0;
+
+        async function loadHomeData() {
+            try {
+                // Fetch Categories
+                const catRes = await fetch(`${API_BASE}/categories`);
+                const categories = await catRes.json();
+                const catBar = document.getElementById('category-bar');
+                categories.forEach(cat => {
+                    const btn = document.createElement('button');
+                    btn.className = 'category-chip';
+                    btn.innerText = cat.categoryName;
+                    btn.onclick = () => filterCategory(cat.categoryId, btn);
+                    catBar.appendChild(btn);
+                });
+
+                // Fetch Products
+                const prodRes = await fetch(`${API_BASE}/products`);
+                allProducts = await prodRes.json();
+                renderProducts(allProducts);
+
+            } catch (err) {
+                document.getElementById('products-loading').innerHTML = `
+                    <div style="background: var(--danger-light); color: var(--danger); padding: 1.5rem; border-radius: var(--radius);">
+                        ⚠️ Failed to connect to backend: ${err.message}
+                    </div>
+                `;
+            }
+        }
+
+        function filterCategory(catId, element) {
+            activeCategoryId = catId;
+            document.querySelectorAll('.category-chip').forEach(el => el.classList.remove('active'));
+            if (element) {
+                element.classList.add('active');
+            } else {
+                document.querySelector('.category-chip').classList.add('active');
+            }
+
+            if (catId === 0) {
+                renderProducts(allProducts);
+            } else {
+                const filtered = allProducts.filter(p => p.categoryId === catId);
+                renderProducts(filtered);
+            }
+        }
+
+        function renderProducts(products) {
+            const container = document.getElementById('products-container');
+            const loading = document.getElementById('products-loading');
+
+            loading.style.display = 'none';
+            container.style.display = 'grid';
+            container.innerHTML = '';
+
+            if (products.length === 0) {
+                container.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 3rem; background: var(--surface); border-radius: var(--radius);">
+                        <p style="font-size: 1.2rem; color: var(--text-muted);">No products found in this category.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            products.forEach(p => {
+                const stock = p.stockQuantity || 0;
+                let stockClass = 'stock-in';
+                let stockText = `${stock} in stock`;
+                if (stock === 0) {
+                    stockClass = 'stock-out';
+                    stockText = 'Out of stock';
+                } else if (stock <= 5) {
+                    stockClass = 'stock-low';
+                    stockText = `Low stock (${stock} left)`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                card.innerHTML = `
+                    <div class="product-img-box">
+                        <span>${getProductIcon(p.categoryId)}</span>
+                        <span class="stock-tag ${stockClass}">${stockText}</span>
+                    </div>
+                    <div class="product-info">
+                        <div class="product-category">${escapeHtml(p.categoryName || 'General')}</div>
+                        <h3 class="product-title">${escapeHtml(p.name)}</h3>
+                        <p class="product-desc">${escapeHtml(p.description)}</p>
+                        <div class="product-footer">
+                            <span class="product-price">${formatCurrency(p.price)}</span>
+                            <div class="product-actions">
+                                <a href="/product-details.html?id=${p.productId}" class="btn btn-outline btn-sm">Details</a>
+                                <button onclick="quickAddToCart(${p.productId}, ${stock})" class="btn btn-primary btn-sm" ${stock === 0 ? 'disabled' : ''}>
+                                    🛒 Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        async function quickAddToCart(productId, stock) {
+            if (stock <= 0) {
+                showToast('Sorry, this product is currently out of stock.', 'error');
+                return;
+            }
+            const user = getCurrentUser();
+            if (!user) {
+                showToast('Please log in to add items to your cart.', 'error');
+                sessionStorage.setItem('auth_redirect', '/index.html');
+                setTimeout(() => window.location.href = '/login.html', 800);
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/cart/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: user.userId, productId: productId, quantity: 1 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Added 1 item to your cart!', 'success');
+                    updateCartBadge();
+                } else {
+                    showToast(data.error || 'Failed to add to cart.', 'error');
+                }
+            } catch (err) {
+                showToast('Network error: ' + err.message, 'error');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadHomeData);
+    </script>
+</body>
+</html>

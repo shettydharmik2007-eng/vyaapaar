@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout — Vyaapaar E-Commerce</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/index.html" class="brand-logo">
+                <span class="brand-badge">व्यापार</span>
+                <span>VYAAPAAR</span>
+            </a>
+
+            <ul class="nav-links" style="margin-left: auto;">
+                <li><a href="/index.html" class="nav-link">Home</a></li>
+                <li><a href="/products.html" class="nav-link">Products</a></li>
+                <li><a href="/cart.html" class="nav-link">Cart</a></li>
+                <li id="nav-auth-links">
+                    <a href="/login.html" class="nav-link">Login</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <div style="margin-bottom: 2rem;">
+            <h1 style="font-size: 2rem; font-weight: 800;">Order Checkout</h1>
+            <p style="color: var(--text-secondary);">Finalize your delivery details and confirm your order placement</p>
+        </div>
+
+        <div id="checkout-loading" style="text-align: center; padding: 4rem; color: var(--text-muted);">
+            <p>Validating cart and stock status...</p>
+        </div>
+
+        <!-- Success Confirmation View -->
+        <div id="checkout-success" style="display: none; max-width: 680px; margin: 2rem auto; text-align: center; background: var(--surface); border: 2px solid var(--success); border-radius: var(--radius-lg); padding: 3rem 2rem; box-shadow: var(--shadow-lg);">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">🎉</div>
+            <h2 style="font-size: 1.8rem; font-weight: 800; color: var(--success); margin-bottom: 0.5rem;">Order Placed Successfully!</h2>
+            <p style="color: var(--text-secondary); font-size: 1.05rem; margin-bottom: 1.5rem;">
+                Thank you for your purchase. Your order has been recorded into the database and stock has been deducted atomically.
+            </p>
+
+            <div style="background: var(--surface-alt); border-radius: var(--radius); padding: 1.5rem; text-align: left; margin-bottom: 2rem; border: 1px solid var(--border);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="color: var(--text-muted);">Order Reference ID:</span>
+                    <strong id="conf-order-id" style="color: var(--primary); font-size: 1.1rem;">#0</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="color: var(--text-muted);">Total Amount Paid:</span>
+                    <strong id="conf-total" style="font-size: 1.1rem;">₹0.00</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="color: var(--text-muted);">Fulfillment Status:</span>
+                    <span class="status-badge status-confirmed">CONFIRMED</span>
+                </div>
+                <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
+                    <span style="color: var(--text-muted); font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Shipping Address:</span>
+                    <span id="conf-address" style="font-weight: 600;">Address details</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <a href="/orders.html" class="btn btn-primary">📦 View My Orders</a>
+                <a href="/products.html" class="btn btn-outline">Continue Shopping →</a>
+            </div>
+        </div>
+
+        <!-- Active Checkout Form Layout -->
+        <div id="checkout-content" class="checkout-layout" style="display: none;">
+            <!-- Left: Shipping Form -->
+            <div class="card">
+                <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+                    1. Shipping & Delivery Address
+                </h2>
+
+                <div id="checkout-alert" style="display: none; padding: 0.85rem 1rem; border-radius: var(--radius); margin-bottom: 1.25rem; font-size: 0.9rem;"></div>
+
+                <form id="checkout-form">
+                    <div class="form-group">
+                        <label class="form-label">Recipient Name</label>
+                        <input type="text" id="ship-name" class="form-control" readonly style="background: var(--surface-alt);">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" id="ship-email" class="form-control" readonly style="background: var(--surface-alt);">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="ship-address">Complete Shipping Address <span style="color: var(--danger);">*</span></label>
+                        <textarea id="ship-address" class="form-control" rows="3" required placeholder="Street address, Apartment/Flat, City, State, PIN code..."></textarea>
+                    </div>
+
+                    <div style="background: var(--surface-alt); padding: 1rem; border-radius: var(--radius); margin: 1.5rem 0; border: 1px solid var(--border);">
+                        <div style="font-weight: 700; margin-bottom: 0.25rem;">💳 Payment Method:</div>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem;">Cash on Delivery / Direct University Project Simulation (Pre-approved)</div>
+                    </div>
+
+                    <button type="submit" id="place-order-btn" class="btn btn-primary btn-block" style="padding: 0.95rem; font-size: 1.1rem;">
+                        🔒 Confirm & Place Order Now
+                    </button>
+                </form>
+            </div>
+
+            <!-- Right: Order Items Summary -->
+            <div>
+                <div class="card">
+                    <h2 style="font-size: 1.25rem; font-weight: 800; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+                        2. Order Items (<span id="items-count">0</span>)
+                    </h2>
+
+                    <div id="checkout-items-list" style="max-height: 280px; overflow-y: auto; margin-bottom: 1.25rem;">
+                        <!-- Items rendered dynamically -->
+                    </div>
+
+                    <div class="summary-row">
+                        <span>Items Subtotal:</span>
+                        <strong id="co-subtotal">₹0.00</strong>
+                    </div>
+
+                    <div class="summary-row">
+                        <span>Shipping Fee:</span>
+                        <strong style="color: var(--success);">FREE</strong>
+                    </div>
+
+                    <div class="summary-row summary-total">
+                        <span>Total Payable:</span>
+                        <strong id="co-total" style="color: var(--primary);">₹0.00</strong>
+                    </div>
+                </div>
+
+                <div style="margin-top: 1rem; text-align: center;">
+                    <a href="/cart.html" style="color: var(--text-secondary); font-size: 0.9rem; text-decoration: none;">← Edit Cart Items</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p><strong>Vyaapaar E-Commerce System</strong> — Java SE 17 & MySQL</p>
+    </footer>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        let cartData = null;
+
+        async function initCheckout() {
+            if (!requireAuth('/checkout.html')) return;
+
+            const user = getCurrentUser();
+            document.getElementById('ship-name').value = user.fullName || '';
+            document.getElementById('ship-email').value = user.email || '';
+            document.getElementById('ship-address').value = user.address || '';
+
+            try {
+                const res = await fetch(`${API_BASE}/cart?userId=${user.userId}`);
+                const data = await res.json();
+                cartData = data;
+
+                document.getElementById('checkout-loading').style.display = 'none';
+
+                if (!data.items || data.items.length === 0) {
+                    showToast('Your cart is empty. Please add products first.', 'error');
+                    setTimeout(() => window.location.href = '/products.html', 1000);
+                    return;
+                }
+
+                document.getElementById('checkout-content').style.display = 'grid';
+                document.getElementById('items-count').innerText = data.items.length;
+
+                const itemsContainer = document.getElementById('checkout-items-list');
+                itemsContainer.innerHTML = '';
+
+                data.items.forEach(item => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--surface-alt); font-size: 0.9rem;';
+                    row.innerHTML = `
+                        <div>
+                            <div style="font-weight: 600;">${escapeHtml(item.productName)}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Qty: ${item.quantity} × ${formatCurrency(item.price)}</div>
+                        </div>
+                        <div style="font-weight: 700; align-self: center;">
+                            ${formatCurrency(item.subtotal)}
+                        </div>
+                    `;
+                    itemsContainer.appendChild(row);
+                });
+
+                document.getElementById('co-subtotal').innerText = formatCurrency(data.total);
+                document.getElementById('co-total').innerText = formatCurrency(data.total);
+
+            } catch (err) {
+                document.getElementById('checkout-loading').innerHTML = `
+                    <div style="background: var(--danger-light); color: var(--danger); padding: 1.5rem; border-radius: var(--radius);">
+                        ⚠️ Error validating checkout: ${err.message}
+                    </div>
+                `;
+            }
+        }
+
+        document.getElementById('checkout-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = getCurrentUser();
+            if (!user) return;
+
+            const shippingAddress = document.getElementById('ship-address').value.trim();
+            const alertBox = document.getElementById('checkout-alert');
+            const submitBtn = document.getElementById('place-order-btn');
+
+            if (!shippingAddress) {
+                alertBox.style.display = 'block';
+                alertBox.style.background = 'var(--danger-light)';
+                alertBox.style.color = 'var(--danger)';
+                alertBox.innerHTML = '⚠️ Please provide a valid shipping address.';
+                return;
+            }
+
+            alertBox.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Processing ACID Transaction...';
+
+            try {
+                const res = await fetch(`${API_BASE}/checkout`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.userId,
+                        shippingAddress: shippingAddress
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success && data.order) {
+                    // Update UI to success state
+                    document.getElementById('checkout-content').style.display = 'none';
+                    document.getElementById('checkout-success').style.display = 'block';
+
+                    document.getElementById('conf-order-id').innerText = '#' + data.order.orderId;
+                    document.getElementById('conf-total').innerText = formatCurrency(data.order.totalAmount);
+                    document.getElementById('conf-address').innerText = data.order.shippingAddress;
+
+                    showToast('Order confirmed and placed successfully!', 'success');
+                    updateCartBadge();
+                } else {
+                    alertBox.style.display = 'block';
+                    alertBox.style.background = 'var(--danger-light)';
+                    alertBox.style.color = 'var(--danger)';
+                    alertBox.innerHTML = `⚠️ ${escapeHtml(data.error || 'Checkout failed.')}`;
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = '🔒 Confirm & Place Order Now';
+                }
+            } catch (err) {
+                alertBox.style.display = 'block';
+                alertBox.style.background = 'var(--danger-light)';
+                alertBox.style.color = 'var(--danger)';
+                alertBox.innerHTML = `⚠️ Network error: ${err.message}`;
+                submitBtn.disabled = false;
+                submitBtn.innerText = '🔒 Confirm & Place Order Now';
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', initCheckout);
+    </script>
+</body>
+</html>

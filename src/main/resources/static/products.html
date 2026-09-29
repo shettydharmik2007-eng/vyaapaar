@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Products Catalog — Vyaapaar E-Commerce</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/index.html" class="brand-logo">
+                <span class="brand-badge">व्यापार</span>
+                <span>VYAAPAAR</span>
+            </a>
+
+            <form id="nav-search-form" class="nav-search">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="nav-search-input" placeholder="Search catalog...">
+            </form>
+
+            <ul class="nav-links">
+                <li><a href="/index.html" class="nav-link">Home</a></li>
+                <li><a href="/products.html" class="nav-link active">Products</a></li>
+                <li>
+                    <a href="/cart.html" class="cart-btn">
+                        <span>🛒 Cart</span>
+                        <span id="cart-badge" class="cart-badge">0</span>
+                    </a>
+                </li>
+                <li id="nav-auth-links">
+                    <a href="/login.html" class="nav-link">Login</a>
+                    <a href="/register.html" class="btn btn-primary btn-sm">Register</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <div style="margin-bottom: 2rem;">
+            <h1 id="page-title" style="font-size: 2rem; font-weight: 800;">All Products</h1>
+            <p id="page-subtitle" style="color: var(--text-secondary);">Browse available inventory directly from database</p>
+        </div>
+
+        <!-- Filter and Search Bar -->
+        <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 2rem;">
+            <div id="category-chips" class="category-filter-bar" style="margin-bottom: 0;">
+                <button class="category-chip active" onclick="setCategory(0, this)">All</button>
+                <!-- Categories loaded dynamically -->
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-secondary);">Sort:</label>
+                <select id="sort-select" onchange="applySort()" class="form-control" style="width: auto; padding: 0.4rem 0.8rem;">
+                    <option value="default">Featured</option>
+                    <option value="price-low">Price: Low to High</option>
+                    <option value="price-high">Price: High to Low</option>
+                    <option value="name">Product Name (A-Z)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Active Search Banner if searching -->
+        <div id="search-banner" style="display: none; background: var(--primary-light); padding: 0.75rem 1.25rem; border-radius: var(--radius); margin-bottom: 1.5rem; border: 1px solid rgba(37, 99, 235, 0.2);">
+            <span>Showing results for search: <strong id="search-query-text"></strong></span>
+            <a href="/products.html" style="margin-left: 1rem; color: var(--primary); font-weight: 700; text-decoration: none;">Clear Search ✕</a>
+        </div>
+
+        <div id="loading" style="text-align: center; padding: 4rem; color: var(--text-muted);">
+            <p>Fetching catalog products...</p>
+        </div>
+
+        <div id="products-grid" class="product-grid" style="display: none;"></div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p><strong>Vyaapaar E-Commerce System</strong> — Java SE 17 & MySQL</p>
+    </footer>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/js/app.js"></script>
+    <script>
+        let currentProducts = [];
+        let selectedCategory = 0;
+        let searchQuery = '';
+
+        async function initCatalog() {
+            const urlParams = new URLSearchParams(window.location.search);
+            searchQuery = urlParams.get('q') || '';
+            const catParam = urlParams.get('categoryId');
+            if (catParam) selectedCategory = parseInt(catParam);
+
+            if (searchQuery) {
+                document.getElementById('search-banner').style.display = 'block';
+                document.getElementById('search-query-text').innerText = searchQuery;
+                document.getElementById('nav-search-input').value = searchQuery;
+                document.getElementById('page-title').innerText = `Search Results`;
+            }
+
+            try {
+                // Load Categories
+                const catRes = await fetch(`${API_BASE}/categories`);
+                const categories = await catRes.json();
+                const chipsContainer = document.getElementById('category-chips');
+                categories.forEach(c => {
+                    const btn = document.createElement('button');
+                    btn.className = `category-chip ${selectedCategory === c.categoryId ? 'active' : ''}`;
+                    btn.innerText = c.categoryName;
+                    btn.onclick = () => setCategory(c.categoryId, btn);
+                    chipsContainer.appendChild(btn);
+                });
+
+                // Load Products
+                let fetchUrl = `${API_BASE}/products`;
+                if (searchQuery) {
+                    fetchUrl += `?q=${encodeURIComponent(searchQuery)}`;
+                }
+                const prodRes = await fetch(fetchUrl);
+                currentProducts = await prodRes.json();
+                renderCatalog();
+            } catch (err) {
+                document.getElementById('loading').innerHTML = `
+                    <div style="background: var(--danger-light); color: var(--danger); padding: 1.5rem; border-radius: var(--radius);">
+                        ⚠️ Error loading products: ${err.message}
+                    </div>
+                `;
+            }
+        }
+
+        function setCategory(catId, btn) {
+            selectedCategory = catId;
+            document.querySelectorAll('.category-chip').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            renderCatalog();
+        }
+
+        function applySort() {
+            const sortVal = document.getElementById('sort-select').value;
+            if (sortVal === 'price-low') {
+                currentProducts.sort((a, b) => a.price - b.price);
+            } else if (sortVal === 'price-high') {
+                currentProducts.sort((a, b) => b.price - a.price);
+            } else if (sortVal === 'name') {
+                currentProducts.sort((a, b) => a.name.localeCompare(b.name));
+            }
+            renderCatalog();
+        }
+
+        function renderCatalog() {
+            const grid = document.getElementById('products-grid');
+            const loading = document.getElementById('loading');
+
+            loading.style.display = 'none';
+            grid.style.display = 'grid';
+            grid.innerHTML = '';
+
+            let list = currentProducts;
+            if (selectedCategory > 0) {
+                list = list.filter(p => p.categoryId === selectedCategory);
+            }
+
+            if (list.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 4rem; background: var(--surface); border-radius: var(--radius); border: 1px dashed var(--border);">
+                        <h3>No products found</h3>
+                        <p style="color: var(--text-secondary); margin-top: 0.5rem;">Try searching for another keyword or selecting a different category.</p>
+                        <a href="/products.html" class="btn btn-outline btn-sm" style="margin-top: 1rem;">View All Products</a>
+                    </div>
+                `;
+                return;
+            }
+
+            list.forEach(p => {
+                const stock = p.stockQuantity || 0;
+                let stockClass = 'stock-in';
+                let stockText = `${stock} in stock`;
+                if (stock === 0) {
+                    stockClass = 'stock-out';
+                    stockText = 'Out of stock';
+                } else if (stock <= 5) {
+                    stockClass = 'stock-low';
+                    stockText = `Low stock (${stock} left)`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                card.innerHTML = `
+                    <div class="product-img-box">
+                        <span>${getProductIcon(p.categoryId)}</span>
+                        <span class="stock-tag ${stockClass}">${stockText}</span>
+                    </div>
+                    <div class="product-info">
+                        <div class="product-category">${escapeHtml(p.categoryName || 'General')}</div>
+                        <h3 class="product-title">${escapeHtml(p.name)}</h3>
+                        <p class="product-desc">${escapeHtml(p.description)}</p>
+                        <div class="product-footer">
+                            <span class="product-price">${formatCurrency(p.price)}</span>
+                            <div class="product-actions">
+                                <a href="/product-details.html?id=${p.productId}" class="btn btn-outline btn-sm">Details</a>
+                                <button onclick="quickAddToCart(${p.productId}, ${stock})" class="btn btn-primary btn-sm" ${stock === 0 ? 'disabled' : ''}>
+                                    🛒 Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function quickAddToCart(productId, stock) {
+            if (stock <= 0) {
+                showToast('Sorry, this product is currently out of stock.', 'error');
+                return;
+            }
+            const user = getCurrentUser();
+            if (!user) {
+                showToast('Please log in to add items to your cart.', 'error');
+                sessionStorage.setItem('auth_redirect', window.location.href);
+                setTimeout(() => window.location.href = '/login.html', 800);
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/cart/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: user.userId, productId: productId, quantity: 1 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Added 1 item to your cart!', 'success');
+                    updateCartBadge();
+                } else {
+                    showToast(data.error || 'Failed to add to cart.', 'error');
+                }
+            } catch (err) {
+                showToast('Network error: ' + err.message, 'error');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initCatalog);
+    </script>
+</body>
+</html>

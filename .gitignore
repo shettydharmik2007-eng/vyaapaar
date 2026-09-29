@@ -1,0 +1,52 @@
+# ====================================================================
+# Git Ignore for Java / Maven Project: Vyaapaar
+# ====================================================================
+
+# Compiled Java class files
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+
+# Maven build directory
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Log files and crash dumps
+*.log
+hs_err_pid*
+replay_pid*
+
+# IDE Configurations
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# Visual Studio Code
+.vscode/
+
+# Operating System specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment / Secret overrides (Keep db.properties as template)
+*.env
+*.local.properties
