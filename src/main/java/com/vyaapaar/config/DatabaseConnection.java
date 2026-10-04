@@ -1,20 +1,27 @@
 package com.vyaapaar.config;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 
 /**
- * Utility class to manage JDBC Database Connections to MySQL for Vyaapaar.
+ * Utility class to manage pooled JDBC Database Connections to MySQL for Vyaapaar using HikariCP.
  * 
  * Supports both local development (localhost:3306/vyaapaar_db) and cloud deployments (e.g. Render / Aiven MySQL).
  * 
+ * Performance Optimization:
+ * - Uses HikariCP connection pooling to reuse established remote TLS/TCP connections to Aiven MySQL.
+ * - Prevents repetitive connection handshakes on each DAO request.
+ * - Configured with a lightweight pool footprint suited for Render free tiers.
+ *
  * Connection details for Local:
  * - Database: MySQL
  * - Host: localhost
@@ -32,7 +39,10 @@ import java.util.Properties;
 public class DatabaseConnection {
 
     private static final Properties properties = new Properties();
+    private static volatile HikariDataSource dataSource;
     private static volatile boolean diagnosticPrinted = false;
+    private static final Object lock = new Object();
+
     private static final String DEFAULT_MYSQL_URL = "jdbc:mysql://localhost:3306/vyaapaar_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
     private static final String DEFAULT_DRIVER = "com.mysql.cj.jdbc.Driver";
 
@@ -73,69 +83,127 @@ public class DatabaseConnection {
     private DatabaseConnection() {}
 
     /**
-     * Obtains a connection to the MySQL database (supports both Cloud / Render and Local MySQL).
+     * Initializes and returns the singleton HikariDataSource connection pool.
+     */
+    private static HikariDataSource getDataSource() throws SQLException {
+        if (dataSource == null) {
+            synchronized (lock) {
+                if (dataSource == null) {
+                    String envUser = System.getenv("DB_USER");
+                    String envPassword = System.getenv("DB_PASSWORD");
+                    String envUrl = System.getenv("DB_URL");
+                    String envHost = System.getenv("DB_HOST");
+                    String envPort = System.getenv("DB_PORT");
+                    String envName = System.getenv("DB_NAME");
+                    String envSsl = System.getenv("DB_SSL");
+
+                    // Construct or resolve JDBC URL
+                    String url;
+                    if (envUrl != null && !envUrl.trim().isEmpty()) {
+                        // Direct JDBC URL if specified
+                        url = envUrl.trim();
+                    } else if (envHost != null && !envHost.trim().isEmpty()) {
+                        // Cloud environment (e.g. Render / Aiven MySQL) with decomposed parameters
+                        String host = envHost.trim();
+                        String port = (envPort != null && !envPort.trim().isEmpty()) ? envPort.trim() : "3306";
+                        String dbName = (envName != null && !envName.trim().isEmpty()) ? envName.trim() : "vyaapaar_db";
+
+                        // SSL handling: default to true for cloud deployments (Aiven), unless explicitly set to false
+                        String sslParam = (envSsl != null && !envSsl.trim().isEmpty() && "false".equalsIgnoreCase(envSsl.trim()))
+                                ? "false"
+                                : "true";
+
+                        url = String.format("jdbc:mysql://%s:%s/%s?useSSL=%s&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+                                host, port, dbName, sslParam);
+                    } else {
+                        // Local fallback configuration
+                        url = properties.getProperty("db.url", DEFAULT_MYSQL_URL);
+                    }
+
+                    String user = (envUser != null && !envUser.trim().isEmpty())
+                            ? envUser.trim()
+                            : properties.getProperty("db.user", "root");
+
+                    String password = (envPassword != null)
+                            ? envPassword
+                            : properties.getProperty("db.password", "");
+
+                    String driver = properties.getProperty("db.driver", DEFAULT_DRIVER);
+
+                    try {
+                        HikariConfig config = new HikariConfig();
+                        config.setJdbcUrl(url);
+                        config.setUsername(user);
+                        config.setPassword(password);
+                        config.setDriverClassName(driver);
+
+                        // Lightweight pool configuration optimized for Render free tier + Aiven MySQL
+                        config.setPoolName("VyaapaarHikariPool");
+                        config.setMaximumPoolSize(5);
+                        config.setMinimumIdle(1);
+                        config.setConnectionTimeout(10000); // 10 seconds
+                        config.setIdleTimeout(60000);       // 60 seconds
+                        config.setMaxLifetime(300000);      // 5 minutes
+
+                        // Performance & Caching properties for MySQL
+                        config.addDataSourceProperty("cachePrepStmts", "true");
+                        config.addDataSourceProperty("prepStmtCacheSize", "250");
+                        config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+                        config.addDataSourceProperty("useServerPrepStmts", "true");
+
+                        dataSource = new HikariDataSource(config);
+
+                        // Add shutdown hook for clean pool termination
+                        Runtime.getRuntime().addShutdownHook(new Thread(DatabaseConnection::shutdown));
+                    } catch (Exception e) {
+                        System.err.println("========================================================================");
+                        System.err.println("❌ [DATABASE CONNECTION ERROR] Failed to initialize HikariCP pool!");
+                        System.err.println(" - Target URL : " + url);
+                        System.err.println(" - User       : " + user);
+                        System.err.println(" - Error Msg  : " + e.getMessage());
+                        System.err.println("------------------------------------------------------------------------");
+                        System.err.println(" Troubleshooting steps:");
+                        System.err.println(" 1. For Local: Ensure MySQL Server is running on port 3306 & vyaapaar_db exists.");
+                        System.err.println(" 2. For Local: Set your password in 'db.local.properties' (db.user / db.password).");
+                        System.err.println(" 3. For Render/Cloud: Verify DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_SSL.");
+                        System.err.println("========================================================================");
+                        if (e instanceof SQLException) {
+                            throw (SQLException) e;
+                        } else {
+                            throw new SQLException("Failed to initialize HikariCP connection pool: " + e.getMessage(), e);
+                        }
+                    }
+                }
+            }
+        }
+        return dataSource;
+    }
+
+    /**
+     * Obtains a connection from the HikariCP connection pool (supports both Cloud / Render and Local MySQL).
      *
-     * @return active java.sql.Connection object
-     * @throws SQLException if connection to MySQL fails
+     * @return active java.sql.Connection object borrowed from pool
+     * @throws SQLException if connection retrieval fails
      */
     public static Connection getConnection() throws SQLException {
-        // Environment variables
-        String envUser = System.getenv("DB_USER");
-        String envPassword = System.getenv("DB_PASSWORD");
-        String envUrl = System.getenv("DB_URL");
-        String envHost = System.getenv("DB_HOST");
-        String envPort = System.getenv("DB_PORT");
-        String envName = System.getenv("DB_NAME");
-        String envSsl = System.getenv("DB_SSL");
-
-        // Construct or resolve JDBC URL
-        String url;
-        if (envUrl != null && !envUrl.trim().isEmpty()) {
-            // Direct JDBC URL if specified
-            url = envUrl.trim();
-        } else if (envHost != null && !envHost.trim().isEmpty()) {
-            // Cloud environment (e.g. Render / Aiven MySQL) with decomposed parameters
-            String host = envHost.trim();
-            String port = (envPort != null && !envPort.trim().isEmpty()) ? envPort.trim() : "3306";
-            String dbName = (envName != null && !envName.trim().isEmpty()) ? envName.trim() : "vyaapaar_db";
-
-            // SSL handling: default to true for cloud deployments (Aiven), unless explicitly set to false
-            String sslParam = (envSsl != null && !envSsl.trim().isEmpty() && "false".equalsIgnoreCase(envSsl.trim()))
-                    ? "false"
-                    : "true";
-
-            url = String.format("jdbc:mysql://%s:%s/%s?useSSL=%s&allowPublicKeyRetrieval=true&serverTimezone=UTC",
-                    host, port, dbName, sslParam);
-        } else {
-            // Local fallback configuration
-            url = properties.getProperty("db.url", DEFAULT_MYSQL_URL);
-        }
-
-        String user = (envUser != null && !envUser.trim().isEmpty()) 
-                ? envUser.trim() 
-                : properties.getProperty("db.user", "root");
-
-        String password = (envPassword != null) 
-                ? envPassword 
-                : properties.getProperty("db.password", "");
-
         try {
-            DriverManager.setLoginTimeout(5);
-            Connection conn = DriverManager.getConnection(url, user, password);
+            HikariDataSource ds = getDataSource();
+            Connection conn = ds.getConnection();
 
             if (!diagnosticPrinted) {
-                synchronized (DatabaseConnection.class) {
+                synchronized (lock) {
                     if (!diagnosticPrinted) {
                         try {
                             DatabaseMetaData meta = conn.getMetaData();
                             System.out.println("========================================================================");
-                            System.out.println(">>> [DATABASE] Connected successfully to MySQL!");
+                            System.out.println(">>> [DATABASE] Connected successfully to MySQL via HikariCP Pool!");
                             System.out.println(">>> [RDBMS]    " + meta.getDatabaseProductName() + " " + meta.getDatabaseProductVersion());
                             System.out.println(">>> [URL]      " + meta.getURL());
                             System.out.println(">>> [USER]     " + meta.getUserName());
+                            System.out.println(">>> [POOL]     HikariCP (max: 5, min-idle: 1, timeout: 10s)");
                             System.out.println("========================================================================");
                         } catch (Exception ignored) {
-                            System.out.println(">>> [DATABASE] Connected to MySQL: " + url);
+                            System.out.println(">>> [DATABASE] Connected to MySQL via HikariCP Pool.");
                         }
                         diagnosticPrinted = true;
                     }
@@ -144,23 +212,23 @@ public class DatabaseConnection {
 
             return conn;
         } catch (SQLException e) {
-            System.err.println("========================================================================");
-            System.err.println("❌ [DATABASE CONNECTION ERROR] Failed to connect to MySQL server!");
-            System.err.println(" - Target URL : " + url);
-            System.err.println(" - User       : " + user);
-            System.err.println(" - Error Msg  : " + e.getMessage());
-            System.err.println("------------------------------------------------------------------------");
-            System.err.println(" Troubleshooting steps:");
-            System.err.println(" 1. For Local: Ensure MySQL Server is running on port 3306 & vyaapaar_db exists.");
-            System.err.println(" 2. For Local: Set your password in 'db.local.properties' (db.user / db.password).");
-            System.err.println(" 3. For Render/Cloud: Verify DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_SSL.");
-            System.err.println("========================================================================");
+            if (!diagnosticPrinted) {
+                System.err.println("========================================================================");
+                System.err.println("❌ [DATABASE CONNECTION ERROR] Failed to obtain connection from pool!");
+                System.err.println(" - Error Msg  : " + e.getMessage());
+                System.err.println("------------------------------------------------------------------------");
+                System.err.println(" Troubleshooting steps:");
+                System.err.println(" 1. For Local: Ensure MySQL Server is running on port 3306 & vyaapaar_db exists.");
+                System.err.println(" 2. For Local: Set your password in 'db.local.properties' (db.user / db.password).");
+                System.err.println(" 3. For Render/Cloud: Verify DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_SSL.");
+                System.err.println("========================================================================");
+            }
             throw e;
         }
     }
 
     /**
-     * Safely closes an open database connection.
+     * Safely closes an open database connection (returns it to the HikariCP pool).
      *
      * @param conn the Connection object to close
      */
@@ -170,6 +238,19 @@ public class DatabaseConnection {
                 conn.close();
             } catch (SQLException e) {
                 System.err.println("Error closing database connection: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Closes the HikariCP connection pool on application shutdown.
+     */
+    public static void shutdown() {
+        synchronized (lock) {
+            if (dataSource != null && !dataSource.isClosed()) {
+                dataSource.close();
+                dataSource = null;
+                diagnosticPrinted = false;
             }
         }
     }
